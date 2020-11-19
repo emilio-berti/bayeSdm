@@ -1,0 +1,43 @@
+```{r get data}
+library(tidyverse)
+library(sf)
+
+# IUCN range
+sp <- st_read("~/Downloads/redlist_species_data_6e24daf7-dc4b-4d5d-b59e-a328f7abee4c/data_0.shp") %>% 
+  summarise()
+# GBIF occurrence
+occ <- read_delim("~/Downloads/Pantehra_leo.csv", delim = "\t", guess_max = 10000) %>% 
+  filter_at(vars("decimalLongitude", "decimalLatitude"),
+            all_vars(!is.na(.))) %>% 
+  st_as_sf(coords = c("decimalLongitude", "decimalLatitude"),
+           crs = st_crs(sp))
+# mask GBIF to IUCN range
+p <- st_intersection(occ, sp)
+# plot
+ggplot() +
+  geom_sf(data = sp, fill = "steelblue", alpha = 0.5) +
+  geom_sf(data = p, alpha = 0.5, size = 1, col = "green4") +
+  theme_minimal()
+# save shapefile
+st_write(p, "~/Downloads/Panthera_leo.shp")
+```
+```{r climate}
+library(raster)
+
+clim <- getData(name = "worldclim", var = "bio", res = 2.5)
+max_T <- clim$bio5
+min_T <- clim$bio6
+wet_P <- clim$bio16
+dry_P <- clim$bio17
+clim <- stack(max_T, min_T, wet_P, dry_P)
+val_clim <- values(clim)
+val_clim <- val_clim[!is.na(val_clim[, 1]), ]
+vif_clim <- list()
+for (i in 1:4) {
+  m <- lm(val_clim[, i] ~ val_clim[, -i])
+  r_sq <- summary(m)$r.squared
+  vif_clim[[names(clim)[i]]] <- 1 / (1 - r_sq)
+}
+print(vif_clim)
+writeRaster(clim, "~/Downloads/climate.tiff", overwrite = TRUE)
+```
